@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useActionState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { BrainCircuit, AlertTriangle, CheckCircle, Info, Lightbulb, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ function SubmitButton() {
 }
 
 export default function AnalyzeDiscrepanciesPage() {
-  const [state, formAction] = useFormState(analyzeDataAction, initialState);
+  const [state, formAction] = useActionState(analyzeDataAction, initialState);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeFiscalDiscrepanciesOutput | undefined>(undefined);
   const [formKey, setFormKey] = useState(Date.now()); // To reset form
 
