@@ -39,6 +39,7 @@ export default function DashboardPage() {
               height={400}
               className="rounded-lg shadow-md"
               data-ai-hint="data analytics"
+              priority // Added priority to prevent lazy loading for LCP image
             />
           </div>
         </div>
