@@ -1,44 +1,40 @@
+import { FileText, Package, Truck, BarChart2, Bot, Key, LayoutDashboard } from "lucide-react";
 
-import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, Tags, Split, FileArchive, BrainCircuit } from "lucide-react";
-
-export interface NavItem {
-  title: string;
-  href: string;
-  icon: LucideIcon;
-  label?: string;
-  disabled?: boolean;
-}
-
-export const navItems: NavItem[] = [
+export const navItems = [
   {
-    title: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
-    label: "Visão Geral",
+    title: "Dashboard", // Added back
+    href: "/", // Assuming the dashboard is at the root
+    icon: LayoutDashboard, // Added appropriate icon
+    label: "Dashboard",
   },
   {
     title: "Classificar Fornecedores",
     href: "/classify-suppliers",
-    icon: Tags,
-    label: "Classificação",
+    icon: Package,
+    label: "Suppliers",
   },
   {
     title: "Separar CT-e por Regime",
     href: "/separate-cte",
-    icon: Split,
+    icon: Truck,
     label: "CT-e",
   },
   {
     title: "Separar XML por Tipo",
     href: "/separate-xml",
-    icon: FileArchive,
-    label: "NF-e",
+    icon: FileText,
+    label: "XML",
   },
   {
-    title: "Análise de Divergências",
+    title: "Análise de Divergências Fiscais",
     href: "/analyze-discrepancies",
-    icon: BrainCircuit,
-    label: "IA Insights",
+    icon: Bot,
+    label: "AI Analyze",
+  },
+  {
+    title: "Corrigir Chave de Acesso",
+    href: "/correct-access-key",
+    icon: Key,
+    label: "Correct Key",
   },
 ];
