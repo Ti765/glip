@@ -1,8 +1,21 @@
 # Filtro + Classificador integrados — versão 2025-06-27
 # ----------------------------------------------------
-# 1. CONFIGURAÇÃO — ajuste SOMENTE estas duas linhas:
-input_dir_path = r'C:\Users\Maurício\OneDrive - GLIP\Área de Trabalho\Documentos\1.EMPRESAS\Garden - 605\2025\0001.TESTE\ENTRADAS'   # pasta com .zip
-output_root    = r'C:\Users\Maurício\OneDrive - GLIP\Área de Trabalho\Documentos\1.EMPRESAS\Garden - 605\2025\0001.TESTE\CLASSIFICADOS'
+# 1. PARÂMETROS via linha de comando
+import argparse
+
+parser = argparse.ArgumentParser(description="Classificador de fornecedores")
+parser.add_argument("--input-dir", required=True, dest="input_dir",
+                    help="Diretório com os arquivos XML ou ZIP")
+parser.add_argument("--empresa", required=True, dest="empresa",
+                    help="Código da empresa")
+parser.add_argument("--data-ini", required=True, dest="data_ini",
+                    help="Data inicial (YYYY-MM-DD)")
+parser.add_argument("--data-fim", required=True, dest="data_fim",
+                    help="Data final (YYYY-MM-DD)")
+args = parser.parse_args()
+
+input_dir_path = args.input_dir
+output_root    = args.input_dir + "_CLASSIFICADOS"
 
 # 2. PARÂMETROS GERAIS DO CLASSIFICADOR  (inalterados)
 import os, re, shutil, zipfile, tempfile, logging, xml.etree.ElementTree as ET, pathlib, pandas as pd
@@ -10,11 +23,10 @@ from pathlib import Path
 from datetime import datetime
 import pyodbc
 from bs4 import BeautifulSoup
-from IPython.display import display
 
-EMPRESA    = 605
-DATA_INI   = "2025-03-01"
-DATA_FIM   = "2025-05-31"
+EMPRESA    = int(args.empresa)
+DATA_INI   = args.data_ini
+DATA_FIM   = args.data_fim
 DSN, UID, PWD = "Contabil_BI", "BI", "4431610"
 
 MAX_PATH = 250   # limite seguro para caminho completo
@@ -99,16 +111,35 @@ def processar_zip(zip_path: pathlib.Path, log):
 def filtro_cfop():
     inicio = datetime.now()
     input_dir = Path(input_dir_path)
-    zips = list(input_dir.glob('*.zip'))
-    if not zips:
-        raise FileNotFoundError(f'Nenhum .zip encontrado em {input_dir}')
     log = []
+    zips = list(input_dir.glob('*.zip'))
     for zp in zips:
         processar_zip(zp, log)
+
+    xmls = list(input_dir.glob('*.xml'))
+    for xml_file in xmls:
+        cfops = extrair_cfops(xml_file)
+        destino, regra = classificar_cfops(set(cfops))
+        if destino == 'PASSAR PARA CLASSIFICADOR':
+            shutil.copy2(xml_file, tmp_classif_dir / xml_file.name)
+        else:
+            destino_path = Path(output_root, destino)
+            destino_path.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(xml_file, destino_path / xml_file.name)
+        log.append({
+            'arquivo': xml_file.name,
+            'cfops_distintos': sorted(set(cfops)),
+            'destino': destino,
+            'regra': regra,
+            'zip_origem': xml_file.name
+        })
+
+    if not zips and not xmls:
+        raise FileNotFoundError(f'Nenhum .zip ou .xml encontrado em {input_dir}')
+
     df = pd.DataFrame(log)
     dur = datetime.now() - inicio
     logging.info("Filtro: %d XMLs processados em %s.", len(df), dur)
-    display(df)
     return df
 
 # -------------------- 6.  C L A S S I F I C A D O R  --------------------- #
