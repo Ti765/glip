@@ -1,38 +1,37 @@
+// src/app/api/classify-suppliers/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { tmpdir } from "node:os";
+import { writeFileSync, rmSync } from "fs";
+import { mkdir } from "fs/promises";
+import { join, basename, resolve } from "path";
 import { randomUUID } from "crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync } from "child_process";
 
-export const dynamic = "force-dynamic"; // garante runtime Node
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  // 1) Cria pasta tmp/job_<UUID>/input
+  const jobId = randomUUID();
+  const baseTmp = join(process.cwd(), "tmp", `job_${jobId}`);
+  const inputDir = join(baseTmp, "input");
+  await mkdir(inputDir, { recursive: true });
+
   try {
-    /* ---------- 1. Lê o multipart ---------- */
-    const form     = await req.formData();
-    const empresa  = form.get("empresa") as string;
-    const dataIni  = form.get("dataIni") as string;
-    const dataFim  = form.get("dataFim") as string;
-    const files    = form.getAll("files") as File[];
-
-    if (!empresa || !dataIni || !dataFim || files.length === 0) {
-      return NextResponse.json({ ok: false, error: "Campos faltando." }, { status: 400 });
-    }
-
-    /* ---------- 2. Cria diretório tmp e grava arquivos ---------- */
-    const workDir = join(tmpdir(), `job_${randomUUID()}`);
-    mkdirSync(workDir, { recursive: true });
-
+    // 2) Grava cada upload usando só o basename
+    const form = await req.formData();
+    const files = form.getAll("files") as File[];
     for (const f of files) {
-      const dest = join(workDir, f.name);          // mantém subpastas (ex.: ENT#RADAS/…)
-      mkdirSync(dirname(dest), { recursive: true });
-      const buf  = Buffer.from(await f.arrayBuffer());
-      writeFileSync(dest, buf);
+      const buf = Buffer.from(await f.arrayBuffer());
+      const fn = basename(f.name);
+      writeFileSync(join(inputDir, fn), buf);
     }
 
-    /* ---------- 3. Executa o script Python ---------- */
-    const scriptPath = join(
+    // 3) Pega demais campos do formulário
+    const empresa = form.get("empresa")?.toString() ?? "";
+    const dataIni = form.get("dataIni")?.toString() ?? "";
+    const dataFim = form.get("dataFim")?.toString() ?? "";
+
+    // 4) Local absoluto do script Python
+    const script = join(
       process.cwd(),
       "src",
       "app",
@@ -40,23 +39,35 @@ export async function POST(req: NextRequest) {
       "Classificador_v1.py"
     );
 
+    // 5) Monta argumentos
     const args = [
-      scriptPath,
-      "--input-dir", workDir,
-      "--empresa",   empresa,
-      "--data-ini",  dataIni,
-      "--data-fim",  dataFim,
+      script,
+      "--input-dir",
+      inputDir,
+      "--empresa",
+      empresa,
+      "--data-ini",
+      dataIni,
+      "--data-fim",
+      dataFim,
     ];
 
-    // Usa variável PYTHON_BIN se definida; senão, tenta "python3"
-    const PY = process.env.PYTHON_BIN || "/home/user/.nix-profile/bin/python3";
-    const output = execFileSync(PY, args, { encoding: "utf-8" });
+    // 6) Escolhe o python: primeiro o .venv/bin/python3, senão o python3 do sistema
+    const venvPy = resolve(process.cwd(), ".venv", "bin", "python3");
+    const PY = process.env.PYTHON_BIN || (require("fs").existsSync(venvPy) ? venvPy : "python3");
 
-    /* ---------- 4. Limpa e responde ---------- */
-    rmSync(workDir, { recursive: true, force: true });
-    return NextResponse.json({ ok: true, log: output });
+    // 7) Chama o Python e captura saída
+    const stdout = execFileSync(PY, args, { encoding: "utf-8" });
+
+    return NextResponse.json({ ok: true, log: stdout });
   } catch (err: any) {
-    console.error(err);
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    console.error("classify-suppliers error:", err);
+    return NextResponse.json(
+      { ok: false, error: err.message || String(err) },
+      { status: 500 }
+    );
+  } finally {
+    // 8) Limpa todo o tmp
+    rmSync(baseTmp, { recursive: true, force: true });
   }
 }
