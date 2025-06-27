@@ -43,3 +43,9 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+
+# python (local virtual env, caches e binários)
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo

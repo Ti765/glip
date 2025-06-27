@@ -1,60 +1,106 @@
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useRef, ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UploadCloud, Tags } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";          // ✅ caminho correto
 
 export default function ClassifySuppliersPage() {
+  const [empresa, setEmpresa]   = useState("");
+  const [dataIni, setDataIni]   = useState("");
+  const [dataFim, setDataFim]   = useState("");
+  const [files, setFiles]       = useState<File[]>([]);
+  const [running, setRunning]   = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const { toast } = useToast();                       // ✅ usa o hook real
+  const inputRef  = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    if (e.target.files) setFiles(Array.from(e.target.files));
+  }
+
+  async function handleSubmit() {
+    if (!empresa || !dataIni || !dataFim || files.length === 0) {
+      toast({ variant: "destructive", title: "Preencha todos os campos e selecione a pasta!" });
+      return;
+    }
+
+    const form = new FormData();
+    form.append("empresa", empresa);
+    form.append("dataIni", dataIni);
+    form.append("dataFim", dataFim);
+    files.forEach(f => form.append("files", f, (f as any).webkitRelativePath || f.name));
+
+    try {
+      setRunning(true);
+      setProgress(10);
+
+      const res = await fetch("/api/classify-suppliers", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Falha desconhecida");
+      setProgress(100);
+      toast({ title: "✅ Classificação concluída." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Erro ao classificar", description: err.message });
+    } finally {
+      setRunning(false);
+      setTimeout(() => setProgress(0), 1200);
+    }
+  }
+
   return (
     <div className="space-y-8">
-      <header className="flex items-center space-x-3">
-        <Tags className="h-8 w-8 text-primary" />
-        <div>
-          <h1 className="text-3xl font-bold">Classificar Fornecedores</h1>
-          <p className="text-muted-foreground">
-            Importe arquivos XML e classifique-os por fornecedor utilizando o histórico de acumuladores.
-          </p>
-        </div>
-      </header>
-
-      <Card className="shadow-lg">
+      <Card>
         <CardHeader>
-          <CardTitle>Importar Arquivos XML</CardTitle>
+          <CardTitle>Classificar Fornecedores</CardTitle>
           <CardDescription>
-            Selecione ou arraste os arquivos XML para iniciar a classificação por fornecedor.
+            Selecione a pasta de entradas, informe empresa e período, depois clique em Iniciar.
           </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-6">
-          <div className="grid w-full max-w-lg items-center gap-2">
-            <Label htmlFor="xml-files-suppliers" className="sr-only">Arquivos XML</Label>
-            <Input id="xml-files-suppliers" type="file" multiple className="cursor-pointer file:text-primary file:font-semibold hover:file:bg-primary/10" />
-          </div>
-          
-          <div className="border-2 border-dashed border-border rounded-lg p-12 flex flex-col items-center justify-center text-center bg-muted/20 hover:border-primary transition-colors">
-            <UploadCloud className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-semibold text-foreground mb-1">Arraste e solte os arquivos XML aqui</p>
-            <p className="text-sm text-muted-foreground">ou clique para selecionar</p>
+          {/* Seletor de pasta */}
+          <div>
+            <Label>Diretório de Entradas (arraste ou clique)</Label>
+            <Input
+              ref={inputRef}
+              type="file"
+              webkitdirectory="true"
+              multiple
+              onChange={handleFileChange}
+              className="cursor-pointer"
+            />
+            <p className="text-xs text-muted-foreground">
+              {files.length ? `${files.length} arquivo(s) selecionado(s)` : "Nenhum arquivo selecionado."}
+            </p>
           </div>
 
-          <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-primary via-blue-600 to-purple-600 hover:opacity-90 text-primary-foreground">
-            <UploadCloud className="mr-2 h-5 w-5" />
-            Iniciar Classificação
+          {/* Empresa / Datas */}
+          <div className="grid md:grid-cols-3 gap-4">
+            <div>
+              <Label>Código da Empresa</Label>
+              <Input value={empresa} onChange={e => setEmpresa(e.target.value)} placeholder="586" />
+            </div>
+            <div>
+              <Label>Data Inicial</Label>
+              <Input type="date" value={dataIni} onChange={e => setDataIni(e.target.value)} />
+            </div>
+            <div>
+              <Label>Data Final</Label>
+              <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} />
+            </div>
+          </div>
+
+          <Button onClick={handleSubmit} disabled={running}>
+            {running ? "Processando…" : "Iniciar Classificação"}
           </Button>
-        </CardContent>
-      </Card>
 
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Resultados da Classificação</CardTitle>
-          <CardDescription>
-            Após o processamento, os fornecedores classificados serão exibidos aqui.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-40 bg-muted/50 rounded-md">
-            <p className="text-muted-foreground">Nenhum arquivo processado ainda.</p>
-          </div>
+          {progress > 0 && <Progress value={progress} className="h-2" />}
         </CardContent>
       </Card>
     </div>
