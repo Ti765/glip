@@ -54,10 +54,24 @@ export async function POST(req: NextRequest) {
 
     // 6) Escolhe o python: primeiro o .venv/bin/python3, senão o python3 do sistema
     const venvPy = resolve(process.cwd(), ".venv", "bin", "python3");
-    const PY = process.env.PYTHON_BIN || (require("fs").existsSync(venvPy) ? venvPy : "python3");
+    const PY =
+      process.env.PYTHON_BIN ||
+      (require("fs").existsSync(venvPy) ? venvPy : "python3");
 
-    // 7) Chama o Python de forma assíncrona
-    const pythonProcess = spawn(PY, args);
+    // 6.1) Log para confirmar que o Node vê as variáveis ODBC
+    console.log("🔧 ODBCSYSINI: ", process.env.ODBCSYSINI);
+    console.log("🔧 ODBCINI:    ", process.env.ODBCINI);
+    console.log("🔧 ODBCINSTINI:", process.env.ODBCINSTINI);
+
+    // 7) Chama o Python de forma assíncrona, garantindo que herde o env
+    const pythonProcess = spawn(PY, args, {
+      env: {
+        ...process.env,
+        ODBCSYSINI:  process.env.ODBCSYSINI!,
+        ODBCINI:     process.env.ODBCINI!,
+        ODBCINSTINI: process.env.ODBCINSTINI!,
+      },
+    });
 
     let stdout = "";
     let stderr = "";
@@ -72,6 +86,9 @@ export async function POST(req: NextRequest) {
 
     return new Promise<NextResponse>((resolve) => {
       pythonProcess.on("close", (code) => {
+        // 8) Limpa todo o tmp
+        rmSync(baseTmp, { recursive: true, force: true });
+
         if (code === 0) {
           resolve(NextResponse.json({ ok: true, log: stdout }));
         } else {
@@ -83,8 +100,6 @@ export async function POST(req: NextRequest) {
             )
           );
         }
-        // 8) Limpa todo o tmp
-        rmSync(baseTmp, { recursive: true, force: true });
       });
     });
   } catch (err: any) {

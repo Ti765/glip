@@ -1,14 +1,13 @@
-# Usamos o pkgs padrão fornecido pelo ambiente
 { pkgs ? import <nixpkgs> {} }:
 
-# Criamos um 'let' block para definir uma variável local
 let
-  # Esta é a nossa instância de pacotes separada e configurada para permitir software "não-livre"
+  # Permite pacotes não-livres
   unfreePkgs = import <nixpkgs> { config.allowUnfree = true; };
 in
+
 pkgs.mkShell {
   buildInputs = with pkgs; [
-    # --- Pacotes Livres (usando o 'pkgs' padrão) ---
+    # --- Pacotes livres ---
     python311Full
     unixODBC
     gcc
@@ -19,26 +18,34 @@ pkgs.mkShell {
     python311Packages.openpyxl
     python311Packages.ipython
 
-    # --- Pacote Não-Livre (usando nossa instância 'unfreePkgs' e o sub-atributo 'unfree') ---
-    (unfreePkgs.unfree.msodbcsql17.override {accept_eula = true;})
+    # --- Driver Microsoft ODBC 17 (não-livre) ---
+    unfreePkgs.unixODBCDrivers.msodbcsql17
   ];
 
-  # A configuração do ODBC também precisa ser atualizada para usar a instância e o caminho corretos
   shellHook = ''
-    export ODBCSYSINI=${pkgs.stdenv.mkDerivation {
-      name = "odbc-config";
-      src = ./odbc.ini;
-      # O ambiente de build da configuração precisa do driver
-      nativeBuildInputs = [ (unfreePkgs.unfree.msodbcsql17.override {accept_eula = true;}) ];
-      installPhase = ''
-        mkdir -p $out/etc
-        cp $src $out/etc/odbc.ini
-        # Geramos o odbcinst.ini usando o caminho do driver da instância 'unfreePkgs'
-        echo "[ODBC Driver 17 for SQL Server]" > $out/etc/odbcinst.ini
-        echo "Description=Microsoft ODBC Driver 17 for SQL Server" >> $out/etc/odbcinst.ini
-        echo "Driver=$(find ${(unfreePkgs.unfree.msodbcsql17.override {accept_eula = true;})} -name libmsodbcsql-17.so.*)" >> $out/etc/odbcinst.ini
-        echo "UsageCount=1" >> $out/etc/odbcinst.ini
-      '';
-    }}/etc
+    export ODBCSYSINI=${
+      pkgs.stdenv.mkDerivation {
+        name = "odbc-config";
+        src = ./odbc.ini;
+
+        # Impede que o Nix tente desempacotar o odbc.ini como se fosse um tarball
+        unpackPhase = "true";
+
+        nativeBuildInputs = [
+          unfreePkgs.unixODBCDrivers.msodbcsql17
+        ];
+
+        installPhase = ''
+          mkdir -p $out/etc
+          cp $src $out/etc/odbc.ini
+
+          # Geramos o odbcinst.ini apontando para o driver instalado
+          echo "[ODBC Driver 17 for SQL Server]" > $out/etc/odbcinst.ini
+          echo "Description=Microsoft ODBC Driver 17 for SQL Server" >> $out/etc/odbcinst.ini
+          echo "Driver=$(find ${unfreePkgs.unixODBCDrivers.msodbcsql17} -name libmsodbcsql-17.so.*)" >> $out/etc/odbcinst.ini
+          echo "UsageCount=1" >> $out/etc/odbcinst.ini
+        '';
+      }
+    }/etc
   '';
 }
