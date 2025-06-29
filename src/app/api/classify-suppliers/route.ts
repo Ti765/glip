@@ -4,7 +4,7 @@ import { writeFileSync, rmSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join, basename, resolve } from "path";
 import { randomUUID } from "crypto";
-import { execFileSync } from "child_process";
+import { spawn } from "child_process";
 
 export const runtime = "nodejs";
 
@@ -56,18 +56,44 @@ export async function POST(req: NextRequest) {
     const venvPy = resolve(process.cwd(), ".venv", "bin", "python3");
     const PY = process.env.PYTHON_BIN || (require("fs").existsSync(venvPy) ? venvPy : "python3");
 
-    // 7) Chama o Python e captura saída
-    const stdout = execFileSync(PY, args, { encoding: "utf-8" });
+    // 7) Chama o Python de forma assíncrona
+    const pythonProcess = spawn(PY, args);
 
-    return NextResponse.json({ ok: true, log: stdout });
+    let stdout = "";
+    let stderr = "";
+
+    pythonProcess.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    pythonProcess.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    return new Promise<NextResponse>((resolve) => {
+      pythonProcess.on("close", (code) => {
+        if (code === 0) {
+          resolve(NextResponse.json({ ok: true, log: stdout }));
+        } else {
+          console.error("classify-suppliers error:", stderr);
+          resolve(
+            NextResponse.json(
+              { ok: false, error: stderr || "Erro desconhecido no script Python" },
+              { status: 500 }
+            )
+          );
+        }
+        // 8) Limpa todo o tmp
+        rmSync(baseTmp, { recursive: true, force: true });
+      });
+    });
   } catch (err: any) {
     console.error("classify-suppliers error:", err);
+    // 8) Limpa todo o tmp
+    rmSync(baseTmp, { recursive: true, force: true });
     return NextResponse.json(
       { ok: false, error: err.message || String(err) },
       { status: 500 }
     );
-  } finally {
-    // 8) Limpa todo o tmp
-    rmSync(baseTmp, { recursive: true, force: true });
   }
 }

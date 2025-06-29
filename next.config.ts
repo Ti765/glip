@@ -63,7 +63,10 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  allowedDevOrigins: ['3001-firebase-studio-1747941410841.cluster-ve345ymguzcd6qqzuko2qbxtfe.cloudworkstations.dev'],
+  allowedDevOrigins: [
+    '3001-firebase-studio-1747941410841.cluster-ve345ymguzcd6qqzuko2qbxtfe.cloudworkstations.dev',
+    '9003-firebase-studio-1747941410841.cluster-ve345ymguzcd6qqzuko2qbxtfe.cloudworkstations.dev'
+  ],
 };
 
 export default nextConfig;
