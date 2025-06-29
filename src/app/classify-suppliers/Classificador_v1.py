@@ -73,7 +73,8 @@ EMPRESA  = args.empresa
 DATA_INI = args.data_ini
 DATA_FIM = args.data_fim
 
-# Atenção: DSN não será mais usado diretamente
+# Conexão direta: caminho da biblioteca ODBC Driver 17 instalada pelo Nix
+DRIVER_LIB = "/nix/store/9mklkwp6arkh39dprkdbp7x39i9a87rx-msodbcsql17-17.7.1.1-1/lib/libmsodbcsql-17.7.so.1.1"
 UID, PWD = "BI", "4431610"
 
 MAX_PATH = 250
@@ -90,7 +91,17 @@ _tmp_dir = Path(tempfile.mkdtemp(prefix="xml_para_classif_"))
 # =========================== 3. FILTRO CFOP ============================= #
 
 GROUP_CFOP = {
-    # ... (seu dicionário original de grupos) ...
+    'COMBUSTÍVEIS E LUBRIFICANTES': ['5653', '5656', '6653', '6656', '7667'],
+    'CONSERTOS': ['5915', '5916', '6915', '6916'],
+    'DEMONSTRAÇÕES': ['5912', '5913', '6912', '6913'],
+    'DEVOLUÇÕES': ['5201', '5202', '5208', '5209', '5210', '5410', '5411', '5412', '5413', '5553', '5555', '5556', '5918', '5919', '6201', '6202', '6208', '6209', '6210', '6410', '6411', '6412', '6413', '6553', '6555', '6556', '6918', '6919', '7201', '7202', '7210', '7211', '7212'],
+    'ENERGIA ELÉTRICA': ['5153', '5207', '5251', '5252', '5253', '5254', '5255', '5256', '5257', '5258', '6153', '6207', '6251', '6252', '6253', '6254', '6255', '6256', '6257', '6258', '7207', '7251'],
+    'SERVIÇOS': ['5205', '5301', '5302', '5303', '5304', '5305', '5306', '5307', '5932', '5933', '6205', '6301', '6302', '6303', '6304', '6305', '6306', '6307', '6932', '6933', '7205', '7301'],
+    'TRANSPORTE': ['5206', '5351', '5352', '5353', '5354', '5355', '5356', '5357', '5359', '5360', '6206', '6351', '6352', '6353', '6354', '6355', '6356', '6357', '6359', '6360', '7206', '7358'],
+    'TRANSFERÊNCIAS': ['5151', '5152', '5155', '5156', '5408', '5409', '5552', '5557', '6151', '6152', '6155', '6156', '6408', '6409', '6552', '6557'],
+    'BONIFICAÇÕES E BRINDES': ['5910', '6910'],
+    'REMESSAS': ['5920', '6920'],
+    'OUTRAS': ['5601', '5602', '5605', '5929', '5949', '6929', '6949', '7949'],
 }
 _ALL_CFOPS = {cf for lst in GROUP_CFOP.values() for cf in lst}
 
@@ -154,35 +165,10 @@ def filtro_cfop() -> pd.DataFrame:
 
 # =========================== 4. CLASSIFICADOR =========================== #
 
-def _clean_name(txt: str, limit: int=80) -> str:
-    trans = str.maketrans(
-        "ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇç",
-        "AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCc"
-    )
-    s = (txt or "").translate(trans)
-    s = re.sub(r"[^A-Za-z0-9 _\-.]", "", s)
-    s = re.sub(r"\s+", " ", s).strip().rstrip(" .")
-    return s[:limit]
-
-def _trunc(txt: str, n: int=TRUNC) -> str:
-    return _clean_name(txt)[:n]
-
-def _extrair_emitente(xml_path: Path):
-    ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
-    try:
-        root = ET.parse(xml_path).getroot()
-        emit = root.find(".//nfe:emit", ns)
-        cnpj = re.sub(r"\D", "", emit.find("nfe:CNPJ", ns).text).zfill(14)
-        nome = _clean_name(emit.find("nfe:xNome", ns).text)
-        return cnpj, nome
-    except Exception as e:
-        logging.warning("Falha XML %s: %s", xml_path.name, e)
-        return None, None
-
 def _consulta_periodo(emp: int, ini: str, fim: str):
-    # Conexão "DSN-less" direta ao SQL Server
+    # Conexão DSN-less com caminho de biblioteca
     conn = pyodbc.connect(
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{DRIVER_LIB}}};"
         f"SERVER=SRVGO01,2638;"
         f"DATABASE=contabil;"
         f"UID={UID};"
@@ -213,9 +199,9 @@ def _consulta_periodo(emp: int, ini: str, fim: str):
     return df
 
 def _consulta_fornecedores(emp: int):
-    # Conexão "DSN-less" direta ao SQL Server
+    # Conexão DSN-less com caminho de biblioteca
     conn = pyodbc.connect(
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{DRIVER_LIB}}};"
         f"SERVER=SRVGO01,2638;"
         f"DATABASE=contabil;"
         f"UID={UID};"
